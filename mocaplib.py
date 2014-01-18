@@ -9,10 +9,12 @@
 #numpy
 #scipy
 
-
+#TODO: Write documentation
 import math
 import numpy as np
 import scipy.cluster.hierarchy as hcluster
+import re
+import copy
 
 # helper method used by the other methods in this
 #library 
@@ -27,7 +29,6 @@ def matrixToAxis(mat, angle):
     axis = 1/(2*math.sin(angle)) * np.array([mat[2][1] - mat[1][2], mat[0][2] - mat[2][0], mat[1][0]-mat[0][1]])
     return axis
 
-
 def findLargest(vector):
     #finds the largest number in a 1D array
     largest = 0
@@ -37,9 +38,17 @@ def findLargest(vector):
 
     return largest
 
+#From Armand's dancer.py (Spring 2013)
+def is_number(s):
+    # A utility function to make certain that an argument is a float
+    try:
+        float(s)
+        return True
+    except ValueError:
+        return False
 
 #A method which finds the Center of mass for a points vector
-#points is the raw vector of x y z coordinates from the mocap system
+#points is the raw list of x y z coordinates from the mocap system
 def findCOM(points):
     comt = [0,0,0]
     npts = (len(points) -2 )/3
@@ -52,7 +61,16 @@ def findCOM(points):
         comt[2] += z/npts
     
     return comt
-
+#finds the center of mass for a cluster of points
+# a cluster is an array of [x,y,z] points
+# 
+def clusCOM(cluster):
+    com = [0,0,0]
+    for i in range(len(cluster)):
+        com[0] += cluster[i][0]/len(cluster)
+        com[1] += cluster[i][1]/len(cluster)
+        com[2] += cluster[i][2]/len(cluster)
+    return com
 #A method which  calculates the inertia tensor for a points vector
 #com is a 3 dimensional array that holds the x,y,z center of mass
 #Returns a NUMPY array with the Interia Tensor of the points
@@ -107,6 +125,9 @@ def findAngularVelocity(previousIT, currentIT):
 # an array of point cluster arrays 
 # 
 # generalizes the clustering to n Dancers
+#output in the following form
+# [ points vector , list of numbers which correspond to the points vector, 
+# array of clustered points]
 def cluster(points, thresh):
     #the x,y,z points must first be separated out
     ndata = [[],[],[]]
@@ -125,12 +146,14 @@ def cluster(points, thresh):
     nclusters = findLargest(clusterlist)
     
     #initializes an array to the right size
-    clusters = [[]]*nclusters 
-    
+    #http://stackoverflow.com/questions/7745562/appending-to-2d-lists-in-python
+    clusters = [[] for i in range(nclusters)] 
+    #assingns points to the correct cluster
     for i in range(0, npts):
         #print clusters[clusterlist[i]-1]
+        
         clusters[clusterlist[i]-1].append([ndata[0][i],ndata[1][i],ndata[2][i]])
-    return clusters
+    return [data, clusterlist, clusters]
 
 
 #takes two a 3-D Vectors
@@ -138,3 +161,31 @@ def cluster(points, thresh):
 def findVelocity(prev,curr):
     return [curr[0]-prev[0],curr[1]-prev[1],prev[2]-prev[2]]
 
+# method that used TCP/IP and the
+#'start-record' protocol we've been using to get a
+# frame from the mocap server
+# pretty much copied and pasted
+# from dancer.py of Spring 2013
+def parseFrame(rawIn):
+    
+     # If we can't keep up, there may be multiple records.  Just take the first one.
+    records = rawIn.split("\n")
+        
+    for record in records:
+        if re.search('start-of-record',record): # =='start-of-record':
+            ss = record.split(",")
+            break
+
+        # Remove the first, "start-of-record" string
+    ss.pop(0)
+    fs = []
+    
+    for pt in ss:
+        f2b = pt.replace('[','').replace(']','')
+        if is_number( f2b):
+            fs.append( float( f2b ) )    # pt.replace('[','').replace(']','') ) )
+        else:
+            print 'bad float', f2b
+            print record
+        
+    return fs
